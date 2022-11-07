@@ -9,6 +9,7 @@ edition = "2021"
 na = { package = "nalgebra", version = "0.31.3" }
 num-traits = "0.2.15"
 rand = "0.8.5"
+textflow = "0.2.0"
 
 [features]
 defaults = ["debug_print"]

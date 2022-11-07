@@ -1,14 +1,8 @@
 use core::fmt;
-use std::{num, fmt::Display};
-use na::{DMatrix, Dim, Scalar, ArrayStorage, U2, DefaultAllocator, SMatrix, Const};
+use na::{DMatrix, Scalar};
 
-use crate::ResizableNetwork;
 
-impl fmt::Display for ResizableNetwork<f32> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "input: {:?}\toutput: {:?}\nactivations: {}", self.input, self.output, self.activations.interlace(&self.weights))
-    }
-}
+
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct LacedMatrixElement<T: Scalar>(T, T);

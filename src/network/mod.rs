@@ -1,91 +1,9 @@
-use std::{fmt, ops::{Index, IndexMut}};
+use std::fmt;
 
-#[derive(Clone)]
-struct Node {
-    activation: f32,
-    bias: f32,
+use self::layer::Layer;
 
-    weights: Vec<f32>,
-}
-
-impl Node {
-    fn new() -> Self {
-        Self {
-            activation: 0.0,
-            bias: 0.0,
-            weights: Vec::new(),
-        }
-    }
-}
-
-impl Default for Node {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Debug for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.activation)
-    }
-} 
-
-#[derive(Clone)]
-struct Layer {
-    nodes: Vec<Node>,
-}
-
-impl Layer {
-    fn new (width: usize) -> Self {
-        Self {
-            nodes: vec![Node::default(); width],
-        }
-    }
-
-    fn feedforward(&self, next: &mut Layer) {
-        for i in 0..next.len() {
-            let mut sum = 0.0;
-            // Multiply each node of this layer by the corresponding weight
-            // linking it to the current node of the next layer, and sum the results.
-            for node in self.nodes.iter() {
-                sum += node.activation * node.weights[i];
-            }
-            // Add the node bias to the sum.
-            sum += next[i].bias;
-            
-            // Set the node activation to the normalized sum.
-            next[i].activation = sigmoid(sum);
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl Index<usize> for Layer {
-    type Output = Node;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.nodes[index]
-    }
-}
-
-impl IndexMut<usize> for Layer {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.nodes[index]
-    }
-}
-
-impl fmt::Debug for Layer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[ ")?;
-        for node in &self.nodes {
-            write!(f, "{:?} ", node)?;
-        }
-        write!(f, "]")
-    }
-}
+mod node;
+mod layer;
 
 #[inline]
 fn sigmoid(x: f32) -> f32 {
@@ -97,7 +15,6 @@ fn d_sigmoid(x: f32) -> f32 {
     sigmoid(x) * (1.0 - sigmoid(x))
 }
 
-
 pub struct FatNet {
     input: Layer,
     hidden: Vec<Layer>,
@@ -105,7 +22,7 @@ pub struct FatNet {
 }
 
 impl FatNet {
-    fn new(input_width: usize, hidden_shape: (usize, usize), output_width: usize) -> Self {
+    pub fn new(input_width: usize, hidden_shape: (usize, usize), output_width: usize) -> Self {
         // Create Layers.
         let mut input = Layer::new(input_width);
         let mut hidden = vec![Layer::new(hidden_shape.1); hidden_shape.0];
@@ -134,7 +51,6 @@ impl FatNet {
             // node.weights = vec![0.0; output_width];
             // lets use random weights for now
             node.weights = vec![1.0; output_width];
-
         }
 
         Self {
@@ -144,7 +60,6 @@ impl FatNet {
         }
     }
     
-
     // Take the input and feed it forward through the network.
     pub fn feedforward(&mut self, input: Vec<f32>) {
         // Set the input layer activations.
@@ -163,6 +78,63 @@ impl FatNet {
         // Feed the last hidden layer to the output layer.
         self.hidden.last().unwrap().feedforward(&mut self.output);
     }
+
+    pub fn backprop(&mut self, target: Vec<f32>) {
+        self.update_output_error(target);
+
+        // get the error term for each node in the hidden layer
+        for (layer, next) in self.hidden.clone().iter_mut().zip(self.hidden.iter().skip(1)) {
+            for (node, next) in layer.nodes.iter_mut().zip(next.nodes.iter()) {
+                node.error = next.error * node.activation * (1.0 - node.activation);
+            }
+        }
+    }
+
+    pub fn get_output(&self) -> Vec<f32> {
+        self.output.nodes.iter().map(|node| node.activation).collect()
+    }
+
+    pub fn update_output_error(&mut self, target: Vec<f32>)  {
+        // https://inst.eecs.berkeley.edu/~cs182/sp06/notes/backprop.pdf
+        // 6 - Derivation (output only error)
+        for (node, &target) in self.output.nodes.iter_mut().zip(target.iter()) {
+            node.error = (target - node.activation) * node.activation * (1.0 - node.activation);
+        }
+    }
+
+    pub fn update_weights(&mut self, alpha: f32) {
+        //  update the weights for each node in the hidden layer using the error term 
+        // from the previous layer (next for backprop)
+        let binding = self.hidden.clone();
+        let next_layers = binding.iter().skip(1);
+        for (layer, next) in self.hidden.iter_mut().zip(next_layers) {
+            // update the weights of each layer node using
+            // alpha * prev_error * this_activation
+            let binding = layer.nodes.clone();
+            for (node, next) in layer.nodes.iter_mut().zip(next.nodes.iter()) {
+                for (weight, prev_activation) in node.weights.iter_mut().zip(binding.iter().map(|node| node.activation)) {
+                    println!("weight: {}, prev_activation: {}, next.error: {}", weight, prev_activation, next.error);
+                    *weight += alpha * next.error * prev_activation;
+                    println!("weight: {}", weight);
+
+                }
+            }
+        }
+        
+    }
+}
+
+fn update_weight(a: &mut Layer, b: Layer) {
+    let alpha = 0.001;
+    let eta = 1.0;
+    // update the weights in layer a from layer b
+    // using (alpha * error_term * a.activation) + 0.0 * a.delta
+    for (node_a, node_b) in a.nodes.iter_mut().zip(b.nodes.iter()) {
+        for (weight_a, weight_b) in node_a.weights.iter_mut().zip(node_b.weights.iter()) {
+            *weight_a += alpha * node_b.error * node_a.activation;
+        }
+    }
+    
 }
 
 impl Default for FatNet {
